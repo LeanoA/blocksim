@@ -55,6 +55,7 @@ function blockToNode(
     type: 'block',
     position: { x: block.position[0], y: block.position[1] },
     data: {
+      blockId: block.id,
       blockType: block.type,
       label: block.type,
       params: block.params,

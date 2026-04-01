@@ -11,11 +11,13 @@ import type {
   BlockSchema,
   BlockTypeInfo,
   ConnectionSchema,
+  ImportResponse,
   ModelResponse,
   ModelSchema,
   ModelsListResponse,
   SimulationConfig,
   SimulationResult,
+  ValidationResult,
   WsClientMessage,
   WsServerMessage,
 } from '../types';
@@ -161,6 +163,94 @@ export async function simulate(
     method: 'POST',
     body: config ? JSON.stringify(config) : undefined,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Model Export / Import / Validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Export a model as a .blocksim.json file download.
+ *
+ * Fetches the export endpoint and triggers a browser file-save dialog
+ * by creating a temporary blob URL and clicking a hidden anchor element.
+ */
+export async function exportModel(modelId: string): Promise<void> {
+  const res = await fetch(`${BASE}/models/${modelId}/export`);
+
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body.detail) detail = String(body.detail);
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(detail);
+  }
+
+  // Extract filename from Content-Disposition header, fallback to generic name.
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const filenameMatch = disposition.match(/filename="?([^";\n]+)"?/);
+  const filename = filenameMatch?.[1] ?? `model-${modelId}.blocksim.json`;
+
+  // Create blob URL and trigger download via hidden anchor.
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+
+  // Clean up.
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Import a model from a .blocksim.json file.
+ *
+ * Uploads the file as multipart/form-data. The backend validates the
+ * file contents and returns the imported model with validation results.
+ */
+export async function importModel(file: File): Promise<ImportResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${BASE}/models/import`, {
+    method: 'POST',
+    body: formData,
+    // NOTE: Do NOT set Content-Type header — the browser sets it
+    // automatically with the correct multipart boundary.
+  });
+
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body.detail) detail = String(body.detail);
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(detail);
+  }
+
+  return res.json() as Promise<ImportResponse>;
+}
+
+/**
+ * Validate a stored model without re-importing.
+ *
+ * Runs the backend's multi-level validator (schema, referential, semantic)
+ * and returns the validation result.
+ */
+export async function validateModel(modelId: string): Promise<ValidationResult> {
+  const data = await request<{ validation: ValidationResult }>(
+    `/models/${modelId}/validate`,
+    { method: 'POST' },
+  );
+  return data.validation;
 }
 
 // ---------------------------------------------------------------------------

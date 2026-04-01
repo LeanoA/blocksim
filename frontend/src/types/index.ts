@@ -80,6 +80,61 @@ export interface ModelsListResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+/** Severity level for validation issues. */
+export type ValidationSeverity = 'error' | 'warning' | 'info';
+
+/** A single validation issue found during model validation. */
+export interface ValidationIssue {
+  severity: ValidationSeverity;
+  category: string; // "schema" | "referential" | "semantic"
+  message: string;
+  block_id: string | null;
+  field: string | null;
+}
+
+/** Result of running the multi-level model validator. */
+export interface ValidationResult {
+  valid: boolean; // true if no errors (warnings OK)
+  issues: ValidationIssue[];
+  checksum_match: boolean | null; // null if no checksum in file
+}
+
+// ---------------------------------------------------------------------------
+// Export / Import
+// ---------------------------------------------------------------------------
+
+/** Envelope format for exported model files (.blocksim.json). */
+export interface ExportEnvelope {
+  schema_version: string;
+  exported_at: string; // ISO 8601
+  blocksim_version: string;
+  checksum: string; // SHA-256 hex
+  model: ModelSchema;
+}
+
+/** Response from POST /api/models/import. */
+export interface ImportResponse {
+  id: string;
+  model: ModelSchema;
+  validation: ValidationResult;
+}
+
+// ---------------------------------------------------------------------------
+// Block Execution Errors (simulation resilience)
+// ---------------------------------------------------------------------------
+
+/** Error recorded when a block's compute() fails during simulation. */
+export interface BlockExecutionError {
+  block_id: string;
+  step: number;
+  time: number;
+  error: string;
+}
+
+// ---------------------------------------------------------------------------
 // Simulation
 // ---------------------------------------------------------------------------
 
@@ -92,9 +147,13 @@ export interface SimulationConfig {
   solver: SolverType;
 }
 
+export type SimulationResultStatus = 'completed' | 'completed_with_errors';
+
 export interface SimulationResult {
   time: number[];
   signals: Record<string, number[]>;
+  block_errors?: Record<string, BlockExecutionError[]>;
+  status?: SimulationResultStatus;
 }
 
 /** Single WebSocket simulation frame */
@@ -143,4 +202,4 @@ export type WsServerMessage = WsFrameMessage | WsCompleteMessage | WsErrorMessag
 // UI State types
 // ---------------------------------------------------------------------------
 
-export type SimulationStatus = 'idle' | 'running' | 'complete' | 'error' | 'stopped';
+export type SimulationStatus = 'idle' | 'running' | 'complete' | 'complete_with_errors' | 'error' | 'stopped';

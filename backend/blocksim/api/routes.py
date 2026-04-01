@@ -7,14 +7,20 @@ Endpoints:
 - ``GET  /api/models/{model_id}`` — get a model by ID
 - ``PUT  /api/models/{model_id}`` — update a model
 - ``DELETE /api/models/{model_id}`` — delete a model
+- ``GET  /api/models/{model_id}/export`` — export model as a downloadable JSON file
+- ``POST /api/models/import`` — import a model from an uploaded JSON file
+- ``POST /api/models/{model_id}/validate`` — validate an existing model
 - ``POST /api/simulate/{model_id}`` — run a simulation synchronously
 """
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel as PydanticBaseModel
 
 from blocksim.api.store import ModelNotFoundError, model_store
@@ -31,18 +37,46 @@ from blocksim.core.system import (
 from blocksim.models.persistence import (
     ModelFileError,
     SchemaVersionError,
+    build_export_envelope,
+    parse_import_file,
     load_model as load_model_from_file,
     save_model as save_model_to_file,
 )
 from blocksim.models.schemas import (
+    BlockExecutionErrorSchema,
     BlockSchema,
     ConnectionSchema,
     ModelSchema,
     SimulationConfigSchema,
     SimulationResultSchema,
+    ValidationIssue,
+    ValidationResult,
 )
+from blocksim.models.validator import ModelValidator
 
 router = APIRouter()
+
+# Maximum upload size for model import (10 MB).
+_MAX_IMPORT_SIZE = 10 * 1024 * 1024
+
+
+def _sanitize_filename(name: str) -> str:
+    """Sanitize a model name for use in a download filename.
+
+    Replaces any character that is not alphanumeric, hyphen, or underscore
+    with an underscore.
+
+    Parameters
+    ----------
+    name:
+        The raw model name string.
+
+    Returns
+    -------
+    str
+        A safe filename component (e.g. ``"My_Circuit_v2_"``).
+    """
+    return re.sub(r"[^a-zA-Z0-9_-]", "_", name)
 
 
 # ---------------------------------------------------------------------------
@@ -392,6 +426,158 @@ async def load_model(request: LoadModelRequest) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Export / Import / Validate
+# ---------------------------------------------------------------------------
+
+
+@router.get("/models/{model_id}/export")
+async def export_model(model_id: str) -> StreamingResponse:
+    """Export a stored model as a downloadable JSON file.
+
+    Returns a ``StreamingResponse`` with ``Content-Disposition: attachment``
+    so the browser triggers a file download.  The file includes an
+    :class:`ExportEnvelope` with a SHA-256 checksum.
+
+    Parameters
+    ----------
+    model_id:
+        The ID of the model to export.
+
+    Returns
+    -------
+    StreamingResponse
+        JSON file download.
+
+    Raises
+    ------
+    ModelNotFoundError (404)
+        If the model ID is not found.
+    """
+    model = model_store.get(model_id)
+    envelope = build_export_envelope(model)
+    envelope_json = json.dumps(
+        envelope.model_dump(), indent=2, ensure_ascii=False
+    )
+
+    safe_name = _sanitize_filename(model.name)
+    filename = f"{safe_name}.blocksim.json"
+
+    return StreamingResponse(
+        iter([envelope_json]),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
+@router.post("/models/import", status_code=201)
+async def import_model(file: UploadFile) -> dict[str, Any]:
+    """Import a model from an uploaded JSON file.
+
+    Accepts a multipart file upload, parses the JSON, verifies the
+    checksum (if present), runs 3-level validation, stores the model,
+    and returns the model together with the validation result.
+
+    Parameters
+    ----------
+    file:
+        The uploaded ``.blocksim.json`` file.
+
+    Returns
+    -------
+    dict
+        ``{id, model, validation}`` — the stored model ID, the model
+        definition, and the validation result (including checksum info).
+
+    Raises
+    ------
+    ValueError (400)
+        If the file is not valid JSON or is missing the ``model`` key.
+    HTTPException (413)
+        If the file exceeds the 10 MB limit.
+    """
+    # Read file content with size check.
+    file_bytes = await file.read()
+    if len(file_bytes) > _MAX_IMPORT_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail="File too large. Maximum size is 10 MB.",
+        )
+
+    # Parse the file and check checksum.
+    try:
+        data, checksum_match = parse_import_file(file_bytes)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON: {exc}") from exc
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+
+    # Run 3-level validation on the model data.
+    model_data = data.get("model", data)
+    validator = ModelValidator(registry)
+    parsed_model, validation = validator.validate(model_data)
+
+    # Add checksum info to the validation result.
+    validation.checksum_match = checksum_match
+    if checksum_match is False:
+        validation.issues.append(
+            ValidationIssue(
+                severity="warning",
+                category="checksum",
+                message="Checksum mismatch: the file's checksum does not match "
+                "the recomputed checksum of the model data. The file may "
+                "have been modified.",
+            )
+        )
+
+    # Store the model — even if validation found errors (REQ-IMP-3).
+    if parsed_model is not None:
+        model_to_store = parsed_model
+    else:
+        # Schema validation failed — try to store what we can.
+        try:
+            model_to_store = ModelSchema.model_validate(model_data)
+        except Exception:
+            # Fall back: store with defaults + whatever we have.
+            model_to_store = ModelSchema(
+                name=model_data.get("name", "Imported (invalid)"),
+            )
+
+    model_id = model_store.create(model_to_store)
+    return {
+        "id": model_id,
+        "model": model_to_store.model_dump(),
+        "validation": validation.model_dump(),
+    }
+
+
+@router.post("/models/{model_id}/validate")
+async def validate_model(model_id: str) -> dict[str, Any]:
+    """Run 3-level validation on an existing stored model.
+
+    Parameters
+    ----------
+    model_id:
+        The ID of the model to validate.
+
+    Returns
+    -------
+    dict
+        ``{validation: ValidationResult}`` with all issues found.
+
+    Raises
+    ------
+    ModelNotFoundError (404)
+        If the model ID is not found.
+    """
+    model = model_store.get(model_id)
+    validator = ModelValidator(registry)
+    _, validation = validator.validate(model.model_dump())
+    return {"validation": validation.model_dump()}
+
+
+# ---------------------------------------------------------------------------
 # Simulation
 # ---------------------------------------------------------------------------
 
@@ -484,10 +670,29 @@ async def simulate(
     )
 
     # Convert numpy arrays to lists for JSON serialization.
+    # Build block_errors as schema objects.
+    block_errors_schema: dict[str, list[BlockExecutionErrorSchema]] = {}
+    for block_id, errors in result.block_errors.items():
+        block_errors_schema[block_id] = [
+            BlockExecutionErrorSchema(
+                block_id=err["block_id"],
+                step=err["step"],
+                time=err["time"],
+                error=err["error"],
+            )
+            for err in errors
+        ]
+
+    status = (
+        "completed_with_errors" if block_errors_schema else "completed"
+    )
+
     return SimulationResultSchema(
         time=result.time.tolist(),
         signals={
             key: values.tolist()
             for key, values in result.outputs.items()
         },
+        block_errors=block_errors_schema,
+        status=status,
     )

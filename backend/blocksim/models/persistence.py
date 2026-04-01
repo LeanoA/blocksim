@@ -4,21 +4,35 @@ This module provides functions to serialize :class:`ModelSchema` instances
 to JSON files and deserialize them back, with schema versioning for
 forward compatibility.
 
+It also provides export envelope building (with SHA-256 checksum) and
+import parsing with checksum verification.
+
 Usage::
 
     from blocksim.models.persistence import save_model, load_model
 
     save_model(model, "my_circuit.json")
     loaded = load_model("my_circuit.json")
+
+    # Export envelope
+    from blocksim.models.persistence import build_export_envelope
+    envelope = build_export_envelope(model)
+
+    # Import parsing
+    from blocksim.models.persistence import parse_import_file
+    data, checksum_match = parse_import_file(file_bytes)
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from blocksim.models.schemas import ModelSchema
+import blocksim
+from blocksim.models.schemas import ExportEnvelope, ModelSchema
 
 # Current schema version — bump when the JSON structure changes.
 SCHEMA_VERSION = "1.0.0"
@@ -172,3 +186,118 @@ def _is_version_compatible(file_version: str, supported_version: str) -> bool:
         return True
 
     return file_major <= supported_major
+
+
+# ---------------------------------------------------------------------------
+# Checksum computation
+# ---------------------------------------------------------------------------
+
+
+def compute_checksum(model_dict: dict[str, Any]) -> str:
+    """Compute the SHA-256 hex digest of the canonical JSON of *model_dict*.
+
+    Canonical JSON uses sorted keys and compact separators
+    (``separators=(',', ':')``), producing a deterministic string regardless
+    of key insertion order or formatting.
+
+    Parameters
+    ----------
+    model_dict:
+        The model data dictionary (typically from ``ModelSchema.model_dump()``).
+
+    Returns
+    -------
+    str
+        Lowercase hex SHA-256 digest.
+    """
+    canonical = json.dumps(
+        model_dict, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Export envelope
+# ---------------------------------------------------------------------------
+
+
+def build_export_envelope(model: ModelSchema) -> ExportEnvelope:
+    """Build an :class:`ExportEnvelope` for the given model.
+
+    The envelope includes the schema version, the current ISO-8601 timestamp,
+    the BlockSim version, a SHA-256 checksum of the model data, and the
+    model itself.
+
+    Parameters
+    ----------
+    model:
+        The model to export.
+
+    Returns
+    -------
+    ExportEnvelope
+        The fully populated export envelope.
+    """
+    model_dict = model.model_dump()
+    checksum = compute_checksum(model_dict)
+
+    return ExportEnvelope(
+        schema_version=SCHEMA_VERSION,
+        exported_at=datetime.now(timezone.utc).isoformat(),
+        blocksim_version=blocksim.__version__,
+        checksum=checksum,
+        model=model,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Import parsing
+# ---------------------------------------------------------------------------
+
+
+def parse_import_file(file_bytes: bytes) -> tuple[dict[str, Any], bool | None]:
+    """Parse an imported model file and verify its checksum.
+
+    Accepts raw file bytes, parses JSON, and compares the embedded
+    ``checksum`` field (if present) against the recomputed SHA-256 of
+    the ``model`` data.
+
+    Parameters
+    ----------
+    file_bytes:
+        Raw bytes of the uploaded JSON file.
+
+    Returns
+    -------
+    tuple[dict, bool | None]
+        A tuple of ``(parsed_data, checksum_match)`` where:
+        - ``parsed_data`` is the top-level JSON object (dict)
+        - ``checksum_match`` is ``True`` if the checksum matches,
+          ``False`` if it doesn't, or ``None`` if no checksum was present
+          in the file (legacy format).
+
+    Raises
+    ------
+    json.JSONDecodeError
+        If the file content is not valid JSON.
+    ValueError
+        If the top-level JSON is not a dict or is missing the ``model`` key.
+    """
+    data = json.loads(file_bytes)
+
+    if not isinstance(data, dict):
+        raise ValueError("Expected a JSON object at top level.")
+
+    model_data = data.get("model")
+    if model_data is None:
+        raise ValueError("Missing 'model' key in JSON data.")
+
+    # Check the checksum if present.
+    stored_checksum = data.get("checksum")
+    if stored_checksum is None:
+        checksum_match = None
+    else:
+        computed = compute_checksum(model_data)
+        checksum_match = computed == stored_checksum
+
+    return data, checksum_match

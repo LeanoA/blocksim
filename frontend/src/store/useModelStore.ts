@@ -13,6 +13,7 @@ import { create } from 'zustand';
 
 import * as api from '../api/client';
 import type {
+  BlockExecutionError,
   BlockSchema,
   BlockTypeInfo,
   ConnectionSchema,
@@ -21,6 +22,7 @@ import type {
   SimulationResult,
   SimulationStatus,
   SimFrame,
+  ValidationResult,
   WsServerMessage,
 } from '../types';
 
@@ -43,6 +45,10 @@ export interface ModelState {
   simulationError: string | null;
   /** Live frames accumulated during WebSocket streaming */
   liveFrames: SimFrame[];
+
+  // --- Validation & block errors ---
+  validationResult: ValidationResult | null;
+  blockErrors: Record<string, BlockExecutionError[]>;
 
   // --- UI state ---
   selectedBlockId: string | null;
@@ -73,6 +79,11 @@ export interface ModelState {
   // --- Actions: WebSocket streaming ---
   startStreamingSimulation: () => void;
   stopStreamingSimulation: () => void;
+
+  // --- Actions: export / import / validate ---
+  exportModel: () => Promise<void>;
+  importModel: (file: File) => Promise<void>;
+  validateModel: () => Promise<void>;
 
   // --- Actions: UI ---
   selectBlock: (blockId: string | null) => void;
@@ -115,6 +126,8 @@ export const useModelStore = create<ModelState>((set, get) => ({
   simulationError: null,
   liveFrames: [],
   selectedBlockId: null,
+  validationResult: null,
+  blockErrors: {},
 
   // --- Block library ---
   fetchBlockLibrary: async () => {
@@ -268,13 +281,18 @@ export const useModelStore = create<ModelState>((set, get) => ({
       simulationError: null,
       simulationResult: null,
       liveFrames: [],
+      blockErrors: {},
     });
 
     try {
       const result = await api.simulate(modelId, simulationConfig);
+      const status = result.block_errors && Object.keys(result.block_errors).length > 0
+        ? 'complete_with_errors' as SimulationStatus
+        : 'complete' as SimulationStatus;
       set({
         simulationResult: result,
-        simulationStatus: 'complete',
+        simulationStatus: status,
+        blockErrors: result.block_errors ?? {},
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -310,6 +328,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
       simulationError: null,
       simulationResult: null,
       liveFrames: [],
+      blockErrors: {},
     });
 
     wsHandle = api.connectSimulationWs(
@@ -385,6 +404,50 @@ export const useModelStore = create<ModelState>((set, get) => ({
     }
   },
 
+  // --- Export / Import / Validate ---
+  exportModel: async () => {
+    const { modelId } = get();
+    if (!modelId) throw new Error('No model loaded');
+    try {
+      await api.exportModel(modelId);
+    } catch (err) {
+      console.error('Failed to export model:', err);
+      throw err;
+    }
+  },
+
+  importModel: async (file: File) => {
+    try {
+      const res = await api.importModel(file);
+      set({
+        modelId: res.id,
+        model: res.model,
+        validationResult: res.validation,
+        simulationResult: null,
+        simulationStatus: 'idle',
+        simulationError: null,
+        liveFrames: [],
+        blockErrors: {},
+        selectedBlockId: null,
+      });
+    } catch (err) {
+      console.error('Failed to import model:', err);
+      throw err;
+    }
+  },
+
+  validateModel: async () => {
+    const { modelId } = get();
+    if (!modelId) throw new Error('No model loaded');
+    try {
+      const result = await api.validateModel(modelId);
+      set({ validationResult: result });
+    } catch (err) {
+      console.error('Failed to validate model:', err);
+      throw err;
+    }
+  },
+
   // --- UI ---
   selectBlock: (blockId: string | null) => {
     set({ selectedBlockId: blockId });
@@ -404,6 +467,8 @@ export const useModelStore = create<ModelState>((set, get) => ({
       simulationError: null,
       liveFrames: [],
       selectedBlockId: null,
+      validationResult: null,
+      blockErrors: {},
     });
   },
 }));

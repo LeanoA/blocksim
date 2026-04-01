@@ -8,6 +8,7 @@ import { BlockCanvas } from './components/BlockCanvas';
 import { PropertyPanel } from './components/PropertyPanel';
 import { SimulationControls } from './components/SimulationControls';
 import { SimulationChart } from './components/SimulationChart';
+import { ValidationPanel } from './components/ValidationPanel';
 
 /**
  * Root application component.
@@ -59,6 +60,7 @@ function App() {
               </button>
               {chartOpen && <SimulationChart />}
             </div>
+            <ValidationPanel />
           </div>
           <PropertyPanel />
         </main>

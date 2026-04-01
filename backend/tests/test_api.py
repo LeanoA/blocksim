@@ -732,3 +732,338 @@ class TestErrorHandling:
         data = resp.json()
         assert len(data["time"]) > 0
         assert data["signals"] == {}
+
+
+# ===========================================================================
+# Export Endpoint
+# ===========================================================================
+
+
+class TestExportEndpoint:
+    """Tests for GET /api/models/{model_id}/export."""
+
+    def test_export_returns_file_download(self, client):
+        """Export should return a StreamingResponse with correct headers."""
+        create_resp = client.post("/api/models", json=_constant_to_gain_model())
+        model_id = create_resp.json()["id"]
+
+        resp = client.get(f"/api/models/{model_id}/export")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/json"
+        assert "content-disposition" in resp.headers
+        assert "attachment" in resp.headers["content-disposition"]
+
+    def test_export_content_disposition_filename(self, client):
+        """The filename in Content-Disposition should be sanitized."""
+        create_resp = client.post("/api/models", json=_constant_to_gain_model())
+        model_id = create_resp.json()["id"]
+
+        resp = client.get(f"/api/models/{model_id}/export")
+        disposition = resp.headers["content-disposition"]
+        # Model name "Constant to Gain" should become "Constant_to_Gain"
+        assert ".blocksim.json" in disposition
+        assert "Constant_to_Gain" in disposition
+
+    def test_export_body_is_valid_json_envelope(self, client):
+        """The response body should be a valid ExportEnvelope JSON."""
+        create_resp = client.post("/api/models", json=_constant_to_gain_model())
+        model_id = create_resp.json()["id"]
+
+        resp = client.get(f"/api/models/{model_id}/export")
+        data = resp.json()
+        assert "schema_version" in data
+        assert "exported_at" in data
+        assert "blocksim_version" in data
+        assert "checksum" in data
+        assert "model" in data
+        assert data["model"]["name"] == "Constant to Gain"
+
+    def test_export_checksum_is_valid(self, client):
+        """The checksum in the exported envelope should match the model data."""
+        import hashlib
+        import json as json_mod
+
+        create_resp = client.post("/api/models", json=_constant_to_gain_model())
+        model_id = create_resp.json()["id"]
+
+        resp = client.get(f"/api/models/{model_id}/export")
+        data = resp.json()
+
+        # Recompute the checksum from the model data.
+        model_canonical = json_mod.dumps(
+            data["model"], sort_keys=True, separators=(",", ":")
+        )
+        expected_checksum = hashlib.sha256(model_canonical.encode("utf-8")).hexdigest()
+        assert data["checksum"] == expected_checksum
+
+    def test_export_nonexistent_model_404(self, client):
+        resp = client.get("/api/models/nonexistent/export")
+        assert resp.status_code == 404
+
+
+# ===========================================================================
+# Import Endpoint
+# ===========================================================================
+
+
+class TestImportEndpoint:
+    """Tests for POST /api/models/import."""
+
+    def _export_and_get_bytes(self, client) -> bytes:
+        """Helper: create a model, export it, return the file bytes."""
+        create_resp = client.post("/api/models", json=_constant_to_gain_model())
+        model_id = create_resp.json()["id"]
+        export_resp = client.get(f"/api/models/{model_id}/export")
+        return export_resp.content
+
+    def test_import_valid_file(self, client):
+        """Importing a valid exported file should succeed."""
+        file_bytes = self._export_and_get_bytes(client)
+
+        resp = client.post(
+            "/api/models/import",
+            files={"file": ("test.blocksim.json", file_bytes, "application/json")},
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert "id" in data
+        assert "model" in data
+        assert "validation" in data
+        assert data["model"]["name"] == "Constant to Gain"
+
+    def test_import_valid_file_checksum_matches(self, client):
+        """Checksum should match for a properly exported file."""
+        file_bytes = self._export_and_get_bytes(client)
+
+        resp = client.post(
+            "/api/models/import",
+            files={"file": ("test.blocksim.json", file_bytes, "application/json")},
+        )
+        data = resp.json()
+        assert data["validation"]["checksum_match"] is True
+
+    def test_import_corrupted_checksum_warning(self, client):
+        """A file with mismatched checksum should produce a warning."""
+        import json as json_mod
+
+        file_bytes = self._export_and_get_bytes(client)
+        envelope = json_mod.loads(file_bytes)
+        envelope["checksum"] = "0" * 64  # corrupt
+        corrupted_bytes = json_mod.dumps(envelope).encode("utf-8")
+
+        resp = client.post(
+            "/api/models/import",
+            files={"file": ("test.blocksim.json", corrupted_bytes, "application/json")},
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["validation"]["checksum_match"] is False
+        # Should have a checksum warning.
+        warnings = [
+            i for i in data["validation"]["issues"]
+            if i["severity"] == "warning" and "checksum" in i["message"].lower()
+        ]
+        assert len(warnings) > 0
+
+    def test_import_legacy_no_checksum(self, client):
+        """A legacy file without checksum should import successfully."""
+        import json as json_mod
+
+        legacy_data = {
+            "schema_version": "1.0.0",
+            "model": {
+                "name": "Legacy Model",
+                "blocks": [],
+                "connections": [],
+            },
+        }
+        file_bytes = json_mod.dumps(legacy_data).encode("utf-8")
+
+        resp = client.post(
+            "/api/models/import",
+            files={"file": ("legacy.json", file_bytes, "application/json")},
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["model"]["name"] == "Legacy Model"
+        assert data["validation"]["checksum_match"] is None
+
+    def test_import_invalid_json_400(self, client):
+        """Malformed JSON should return 400."""
+        resp = client.post(
+            "/api/models/import",
+            files={"file": ("bad.json", b"{ not json !!!", "application/json")},
+        )
+        assert resp.status_code == 400
+
+    def test_import_missing_model_key_400(self, client):
+        """A JSON file without a 'model' key should return 400."""
+        import json as json_mod
+
+        data = {"schema_version": "1.0.0"}
+        file_bytes = json_mod.dumps(data).encode("utf-8")
+
+        resp = client.post(
+            "/api/models/import",
+            files={"file": ("no_model.json", file_bytes, "application/json")},
+        )
+        assert resp.status_code == 400
+
+    def test_import_oversized_file_413(self, client):
+        """A file exceeding 10 MB should return 413."""
+        import json as json_mod
+
+        # Create a file just over 10 MB.
+        model_data = {
+            "schema_version": "1.0.0",
+            "model": {
+                "name": "Huge Model",
+                "blocks": [],
+                "connections": [],
+                "metadata": {"padding": "x" * (11 * 1024 * 1024)},
+            },
+        }
+        huge_bytes = json_mod.dumps(model_data).encode("utf-8")
+
+        resp = client.post(
+            "/api/models/import",
+            files={"file": ("huge.json", huge_bytes, "application/json")},
+        )
+        assert resp.status_code == 413
+
+    def test_import_with_unknown_block_types(self, client):
+        """Importing a model with unknown block types should succeed with validation errors."""
+        import json as json_mod
+
+        data = {
+            "schema_version": "1.0.0",
+            "model": {
+                "name": "Unknown Blocks",
+                "blocks": [
+                    {"id": "x", "type": "FooBlock", "params": {}, "position": [0, 0]},
+                ],
+                "connections": [],
+            },
+        }
+        file_bytes = json_mod.dumps(data).encode("utf-8")
+
+        resp = client.post(
+            "/api/models/import",
+            files={"file": ("unknown.json", file_bytes, "application/json")},
+        )
+        assert resp.status_code == 201
+        result = resp.json()
+        # Model should be stored despite validation errors (REQ-IMP-3).
+        assert "id" in result
+        # Validation should flag the unknown type.
+        assert result["validation"]["valid"] is False
+
+    def test_import_model_is_stored_and_retrievable(self, client):
+        """Imported model should be stored and retrievable via GET."""
+        file_bytes = self._export_and_get_bytes(client)
+
+        import_resp = client.post(
+            "/api/models/import",
+            files={"file": ("test.blocksim.json", file_bytes, "application/json")},
+        )
+        model_id = import_resp.json()["id"]
+
+        get_resp = client.get(f"/api/models/{model_id}")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["model"]["name"] == "Constant to Gain"
+
+
+# ===========================================================================
+# Validate Endpoint
+# ===========================================================================
+
+
+class TestValidateEndpoint:
+    """Tests for POST /api/models/{model_id}/validate."""
+
+    def test_validate_valid_model(self, client):
+        """Validating a well-formed model should return valid=True."""
+        create_resp = client.post("/api/models", json=_constant_to_gain_model())
+        model_id = create_resp.json()["id"]
+
+        resp = client.post(f"/api/models/{model_id}/validate")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "validation" in data
+        assert data["validation"]["valid"] is True
+
+    def test_validate_model_with_unknown_block_type(self, client):
+        """A model with unknown block types should have validation errors."""
+        bad_model = {
+            "name": "Bad Blocks",
+            "blocks": [{"id": "x", "type": "NonexistentBlock", "params": {}, "position": [0, 0]}],
+            "connections": [],
+        }
+        create_resp = client.post("/api/models", json=bad_model)
+        model_id = create_resp.json()["id"]
+
+        resp = client.post(f"/api/models/{model_id}/validate")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["validation"]["valid"] is False
+        errors = [i for i in data["validation"]["issues"] if i["severity"] == "error"]
+        assert len(errors) > 0
+
+    def test_validate_model_with_dangling_connection(self, client):
+        """A model with dangling connections should have validation errors."""
+        model = {
+            "name": "Dangling",
+            "blocks": [
+                {"id": "src", "type": "ConstantSource", "params": {"value": 1.0}, "position": [0, 0]},
+            ],
+            "connections": [
+                {
+                    "source_block": "src", "source_port": "out",
+                    "target_block": "missing", "target_port": "in",
+                },
+            ],
+        }
+        create_resp = client.post("/api/models", json=model)
+        model_id = create_resp.json()["id"]
+
+        resp = client.post(f"/api/models/{model_id}/validate")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["validation"]["valid"] is False
+
+    def test_validate_nonexistent_model_404(self, client):
+        resp = client.post("/api/models/nonexistent/validate")
+        assert resp.status_code == 404
+
+    def test_validate_empty_model(self, client):
+        """An empty model should be valid."""
+        create_resp = client.post("/api/models", json={"name": "Empty"})
+        model_id = create_resp.json()["id"]
+
+        resp = client.post(f"/api/models/{model_id}/validate")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["validation"]["valid"] is True
+
+
+# ===========================================================================
+# Simulation with block_errors in response
+# ===========================================================================
+
+
+class TestSimulateWithBlockErrors:
+    """Tests that simulation response includes block_errors and status."""
+
+    def test_simulate_no_errors_returns_completed(self, client):
+        """A successful simulation should have status='completed' and no block_errors."""
+        create_resp = client.post("/api/models", json=_constant_to_gain_model())
+        model_id = create_resp.json()["id"]
+
+        resp = client.post(
+            f"/api/simulate/{model_id}",
+            json={"t_end": 0.01, "dt": 0.001, "solver": "rk4"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data.get("status") == "completed"
+        assert data.get("block_errors") == {}

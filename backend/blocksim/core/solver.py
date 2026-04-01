@@ -47,11 +47,16 @@ class SimulationResult:
         2-D array of state vectors (N × state_size).
     outputs:
         Dict mapping ``"block_id.port_name"`` → 1-D array of values (length N).
+    block_errors:
+        Dict mapping ``block_id`` → list of error dicts recorded during
+        simulation.  Each dict has keys ``block_id``, ``step``, ``time``,
+        and ``error``.  Empty when no errors occurred.
     """
 
     time: np.ndarray
     states: np.ndarray
     outputs: dict[str, np.ndarray] = field(default_factory=dict)
+    block_errors: dict[str, list[dict]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

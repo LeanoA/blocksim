@@ -132,6 +132,11 @@ class DynamicSystem:
         self._total_state_size: int = 0
         self._compiled: bool = False
 
+        # Block error tracking (populated during simulation).
+        self._block_errors: dict[str, list[dict]] = {}
+        self._current_step: int = 0
+        self._accumulate_errors: bool = False
+
     # -- Block management ---------------------------------------------------
 
     def add_block(self, block: Block) -> None:
@@ -308,6 +313,11 @@ class DynamicSystem:
         n_steps = max(1, int(round((t_end - t_start) / dt)))
 
         # --- Initialize phase ---
+        # Reset block error tracking for this simulation run.
+        self._block_errors = {}
+        self._current_step = 0
+        self._accumulate_errors = False
+
         state = self._assemble_initial_state(t_start)
 
         # Pre-allocate recording arrays.
@@ -322,14 +332,21 @@ class DynamicSystem:
 
         # Propagate initial values and record outputs at t=0.
         self._distribute_state(state)
+        self._accumulate_errors = True
         self._propagate_signals(t_start)
+        self._accumulate_errors = False
         self._record_outputs(output_records)
 
         # --- Simulation loop ---
         t = t_start
         for step_idx in range(1, n_steps + 1):
+            self._current_step = step_idx
+
             if self._total_state_size > 0:
                 # Advance state using the solver.
+                # Note: _accumulate_errors stays False during solver calls
+                # so _propagate_signals invoked by _system_derivatives
+                # won't double-count errors.
                 state = solver_instance.step(
                     self._system_derivatives, t, state, dt
                 )
@@ -348,8 +365,10 @@ class DynamicSystem:
 
             t = t_start + step_idx * dt
 
-            # Propagate signals in topological order.
+            # Propagate signals in topological order (main loop — accumulate errors).
+            self._accumulate_errors = True
             self._propagate_signals(t)
+            self._accumulate_errors = False
 
             # Record.
             time_record[step_idx] = t
@@ -366,6 +385,7 @@ class DynamicSystem:
             time=time_record,
             states=state_record,
             outputs=outputs,
+            block_errors=self._block_errors,
         )
 
     # -- Internal helpers ---------------------------------------------------
@@ -390,7 +410,16 @@ class DynamicSystem:
             block.set_state(state[start:end])
 
     def _propagate_signals(self, t: float) -> None:
-        """Evaluate blocks in topological order, propagating port values."""
+        """Evaluate blocks in topological order, propagating port values.
+
+        When ``self._accumulate_errors`` is ``True`` (main simulation loop),
+        exceptions in ``block.compute(t)`` are caught: the block's outputs
+        are set to ``NaN``, the error is recorded, and propagation continues.
+
+        When ``_accumulate_errors`` is ``False`` (ODE solver sub-steps),
+        exceptions propagate normally to avoid silently hiding solver
+        instabilities.
+        """
         assert self._sorted_blocks is not None
 
         for block in self._sorted_blocks:
@@ -401,8 +430,27 @@ class DynamicSystem:
                     value = src.get_output(conn.source_port)
                     block.set_input(conn.target_port, value)
 
-            # Evaluate the block.
-            block.compute(t)
+            # Evaluate the block (with optional error isolation).
+            if self._accumulate_errors:
+                try:
+                    block.compute(t)
+                except Exception as exc:
+                    # Set all output ports to NaN.
+                    for port_name in block.output_ports:
+                        block.set_output(port_name, float("nan"))
+
+                    # Record the error.
+                    error_entry = {
+                        "block_id": block.id,
+                        "step": self._current_step,
+                        "time": t,
+                        "error": str(exc),
+                    }
+                    if block.id not in self._block_errors:
+                        self._block_errors[block.id] = []
+                    self._block_errors[block.id].append(error_entry)
+            else:
+                block.compute(t)
 
     def _system_derivatives(self, t: float, state: np.ndarray) -> np.ndarray:
         """Compute the combined derivative vector for all stateful blocks.

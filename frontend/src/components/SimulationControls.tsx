@@ -11,7 +11,7 @@
  *  - Model name display
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { useModelStore } from '../store/useModelStore';
 import type { SolverType } from '../types';
@@ -49,8 +49,13 @@ export function SimulationControls() {
   const startStreamingSimulation = useModelStore((s) => s.startStreamingSimulation);
   const stopStreamingSimulation = useModelStore((s) => s.stopStreamingSimulation);
   const saveModel = useModelStore((s) => s.saveModel);
+  const exportModelAction = useModelStore((s) => s.exportModel);
+  const importModelAction = useModelStore((s) => s.importModel);
+  const validateModelAction = useModelStore((s) => s.validateModel);
+  const validationResult = useModelStore((s) => s.validationResult);
 
   const [streaming, setStreaming] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isRunning = simulationStatus === 'running';
 
@@ -115,6 +120,45 @@ export function SimulationControls() {
   const toggleStreaming = useCallback(() => {
     setStreaming((s) => !s);
   }, []);
+
+  const handleExport = useCallback(async () => {
+    try {
+      await exportModelAction();
+    } catch {
+      // Error logged in store
+    }
+  }, [exportModelAction]);
+
+  const handleImportClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        await importModelAction(file);
+      } catch {
+        // Error logged in store
+      }
+      // Reset input so the same file can be re-selected
+      e.target.value = '';
+    },
+    [importModelAction],
+  );
+
+  const handleValidate = useCallback(async () => {
+    try {
+      await validateModelAction();
+    } catch {
+      // Error logged in store
+    }
+  }, [validateModelAction]);
+
+  // Count validation errors for badge display
+  const errorCount = validationResult?.issues.filter((i) => i.severity === 'error').length ?? 0;
+  const warningCount = validationResult?.issues.filter((i) => i.severity === 'warning').length ?? 0;
 
   return (
     <div className="sim-controls">
@@ -208,6 +252,51 @@ export function SimulationControls() {
             : simulationError}
         </div>
       )}
+
+      <div className="sim-controls__separator" />
+
+      {/* Export / Import / Validate */}
+      <button
+        className="sim-controls__action-btn"
+        onClick={handleExport}
+        disabled={isRunning}
+        title="Export model as .blocksim.json file"
+      >
+        Export
+      </button>
+
+      <button
+        className="sim-controls__action-btn"
+        onClick={handleImportClick}
+        disabled={isRunning}
+        title="Import model from .blocksim.json file"
+      >
+        Import
+      </button>
+
+      {/* Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,.blocksim.json"
+        style={{ display: 'none' }}
+        onChange={handleFileSelected}
+      />
+
+      <button
+        className="sim-controls__action-btn sim-controls__action-btn--validate"
+        onClick={handleValidate}
+        disabled={isRunning}
+        title="Validate model (schema, referential, semantic)"
+      >
+        Validate
+        {errorCount > 0 && (
+          <span className="sim-controls__badge sim-controls__badge--error">{errorCount}</span>
+        )}
+        {warningCount > 0 && (
+          <span className="sim-controls__badge sim-controls__badge--warning">{warningCount}</span>
+        )}
+      </button>
     </div>
   );
 }
