@@ -48,13 +48,11 @@ A Simulink-like block-diagram simulation framework for modeling and solving dyna
 ```bash
 cd backend
 
-# Create venv — MUST use python3.13 explicitly
-python3.13 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-
-# Install the package with dev dependencies
-pip install -e ".[dev]"
+# Install dependencies with uv (recommended — uses workspace config)
+uv sync --dev
 ```
+
+> **Alternative (pip):** If you prefer pip, create a venv with `python3.13 -m venv .venv`, activate it, and run `pip install -e ".[dev]"`.
 
 ### Frontend
 
@@ -63,14 +61,37 @@ cd frontend
 npm install
 ```
 
-## Running the Application
+## Quick Start
+
+Start the entire system (backend + frontend) with a single command:
+
+```bash
+./start.sh
+```
+
+The script will:
+1. Check for required dependencies (`uv`, `node`, `npm`)
+2. Install/sync backend and frontend dependencies
+3. Start the backend API server (uvicorn on port 8000)
+4. Start the frontend dev server (Vite on port 5173)
+5. Clean up all processes on `Ctrl+C`
+
+| Service         | URL                          |
+|-----------------|------------------------------|
+| Frontend        | http://localhost:5173         |
+| Backend API     | http://localhost:8000         |
+| API Docs        | http://localhost:8000/docs    |
+| Health Check    | http://localhost:8000/health  |
+
+## Running the Application (Manual)
+
+If you prefer to start services individually:
 
 ### Start the API Server
 
 ```bash
 cd backend
-source .venv/bin/activate
-uvicorn blocksim.api.app:create_app --factory --reload
+uv run uvicorn blocksim.api.app:create_app --factory --reload
 ```
 
 The API will be available at `http://localhost:8000`. Key endpoints:
@@ -95,8 +116,7 @@ The frontend will be available at `http://localhost:5173` (Vite default).
 
 ```bash
 cd backend
-source .venv/bin/activate
-python -m pytest tests/ -v
+uv run python -m pytest tests/ -v
 ```
 
 ### Frontend
@@ -111,6 +131,7 @@ npm run build    # TypeScript compilation + Vite build
 
 ```
 blocksim/
+├── start.sh                    # Quick-start script (backend + frontend)
 ├── backend/                    # Python simulation engine + REST/WebSocket API
 │   ├── pyproject.toml          # Python project config & dependencies
 │   ├── blocksim/
@@ -129,10 +150,11 @@ blocksim/
 │   │   │   └── EXTENDING.md    # Guide for adding custom blocks
 │   │   ├── models/             # Pydantic schemas
 │   │   │   ├── schemas.py      # API request/response models
-│   │   │   └── persistence.py  # Model file save/load with versioning
+│   │   │   ├── persistence.py  # Model file save/load with versioning & export
+│   │   │   └── validator.py    # 3-level model validation (schema/referential/semantic)
 │   │   └── api/                # FastAPI application
 │   │       ├── app.py          # Application factory (create_app)
-│   │       ├── routes.py       # REST API endpoints
+│   │       ├── routes.py       # REST API endpoints (CRUD, export, import, validate)
 │   │       ├── ws.py           # WebSocket endpoints
 │   │       ├── store.py        # In-memory model store
 │   │       └── dependencies.py # FastAPI dependency injection
@@ -168,6 +190,40 @@ blocksim/
     └── rlc_series.py           # RLC series circuit (Python script)
 ```
 
+## Export / Import
+
+Models can be exported as `.blocksim.json` files and re-imported later (or shared with other users). The export envelope includes:
+
+- **Schema version** — for forward compatibility
+- **SHA-256 checksum** — detects file tampering or corruption
+- **Timestamp & BlockSim version** — provenance metadata
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/models/{id}/export` | `GET` | Download a model as a `.blocksim.json` file |
+| `/api/models/import` | `POST` | Upload and import a `.blocksim.json` file (multipart) |
+| `/api/models/{id}/validate` | `POST` | Run 3-level validation on a stored model |
+
+### Import Behavior
+
+- Files up to **10 MB** are accepted.
+- On import, the model goes through **3-level validation**:
+  1. **Schema** — Pydantic structural validation
+  2. **Referential** — connection and block reference integrity
+  3. **Semantic** — domain-specific rules (e.g., valid parameter ranges)
+- If a checksum is present, it is verified and any mismatch is reported as a warning.
+- Models are stored even if validation finds non-blocking issues, so users can fix problems interactively.
+
+### Simulation Resilience
+
+The simulation engine includes robustness features:
+
+- **Divergence detection** — if a solver step produces `NaN` or `Inf`, the engine raises a `SimulationDivergenceError` with the exact time step, block, and context.
+- **Structured error responses** — all domain exceptions (algebraic loops, duplicate blocks, invalid connections, schema version mismatches, etc.) are caught and returned as JSON with appropriate HTTP status codes.
+- **Adaptive solvers** — for stiff systems (like RLC circuits), use the `radau` solver which automatically adjusts step size.
+
 ## Solvers
 
 | Solver        | Type              | Best For                        |
@@ -195,7 +251,7 @@ Please make sure all tests pass before submitting your PR:
 
 ```bash
 # Backend
-cd backend && python -m pytest tests/ -v
+cd backend && uv run python -m pytest tests/ -v
 
 # Frontend
 cd frontend && npm run lint && npm run build
