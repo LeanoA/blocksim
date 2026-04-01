@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.0.0",
+  "model": {
+    "name": "Series RLC Circuit — Underdamped Step Response",
+    "blocks": [
+      {
+        "id": "vsrc",
+        "type": "VoltageSource",
+        "params": { "voltage": 10.0, "step_time": null, "initial": 0.0 },
+        "position": [0, 100]
+      },
+      {
+        "id": "sum1",
+        "type": "Sum",
+        "params": { "signs": "+-" },
+        "position": [150, 100]
+      },
+      {
+        "id": "sum2",
+        "type": "Sum",
+        "params": { "signs": "+-" },
+        "position": [300, 100]
+      },
+      {
+        "id": "inductor",
+        "type": "Inductor",
+        "params": { "inductance": 1.0, "i0": 0.0 },
+        "position": [450, 100]
+      },
+      {
+        "id": "resistor",
+        "type": "Resistor",
+        "params": { "resistance": 10.0 },
+        "position": [450, 250]
+      },
+      {
+        "id": "capacitor",
+        "type": "Capacitor",
+        "params": { "capacitance": 0.0001, "v0": 0.0 },
+        "position": [600, 100]
+      },
+      {
+        "id": "scope_vc",
+        "type": "Scope",
+        "params": {},
+        "position": [750, 100]
+      },
+      {
+        "id": "scope_i",
+        "type": "Scope",
+        "params": {},
+        "position": [750, 250]
+      }
+    ],
+    "connections": [
+      {
+        "source_block": "vsrc",
+        "source_port": "out",
+        "target_block": "sum1",
+        "target_port": "in1"
+      },
+      {
+        "source_block": "resistor",
+        "source_port": "out",
+        "target_block": "sum1",
+        "target_port": "in2"
+      },
+      {
+        "source_block": "sum1",
+        "source_port": "out",
+        "target_block": "sum2",
+        "target_port": "in1"
+      },
+      {
+        "source_block": "capacitor",
+        "source_port": "out",
+        "target_block": "sum2",
+        "target_port": "in2"
+      },
+      {
+        "source_block": "sum2",
+        "source_port": "out",
+        "target_block": "inductor",
+        "target_port": "in"
+      },
+      {
+        "source_block": "inductor",
+        "source_port": "out",
+        "target_block": "resistor",
+        "target_port": "in"
+      },
+      {
+        "source_block": "inductor",
+        "source_port": "out",
+        "target_block": "capacitor",
+        "target_port": "in"
+      },
+      {
+        "source_block": "capacitor",
+        "source_port": "out",
+        "target_block": "scope_vc",
+        "target_port": "in"
+      },
+      {
+        "source_block": "inductor",
+        "source_port": "out",
+        "target_block": "scope_i",
+        "target_port": "in"
+      }
+    ],
+    "metadata": {
+      "description": "Series RLC circuit with step voltage input. Underdamped response (R=10Ω, L=1H, C=100μF) shows oscillatory behavior as the capacitor charges.",
+      "author": "BlockSim Examples",
+      "tags": ["electrical", "RLC", "underdamped", "step-response"]
+    }
+  }
+}

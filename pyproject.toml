@@ -1,0 +1,8 @@
+[project]
+name = "blocksim-workspace"
+version = "0.1.0"
+description = "BlockSim — a Simulink-like block-diagram simulation framework"
+requires-python = ">=3.11,<3.15"
+
+[tool.uv.workspace]
+members = ["backend"]

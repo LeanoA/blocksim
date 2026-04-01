@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/api/client.ts","./src/components/blockcanvas.tsx","./src/components/blocknode.tsx","./src/components/blockpalette.tsx","./src/components/propertypanel.tsx","./src/components/simulationchart.tsx","./src/components/simulationcontrols.tsx","./src/store/usemodelstore.ts","./src/types/index.ts"],"version":"5.9.3"}

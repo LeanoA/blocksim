@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+*.egg
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+
+# SDD tooling (agent infrastructure, not project code)
+.agents/
+.atl/
+
+# uv
+uv.lock

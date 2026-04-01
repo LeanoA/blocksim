@@ -1,0 +1,29 @@
+[project]
+name = "blocksim"
+version = "0.1.0"
+description = "BlockSim simulation engine — block-diagram modeling and ODE solving"
+license = "MIT"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "networkx>=3.2",
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "pytest-asyncio>=0.23",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
