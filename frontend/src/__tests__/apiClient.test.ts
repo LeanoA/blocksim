@@ -18,7 +18,6 @@ import type {
   ExportEnvelope,
   BlockExecutionError,
   SimulationResult,
-  ModelSchema,
   ModelResponse,
 } from '../types';
 
