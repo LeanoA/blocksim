@@ -7,9 +7,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
-# Node
+# Node / TypeScript
 node_modules/
 dist/
+*.tsbuildinfo
 
 # IDE
 .vscode/
@@ -24,9 +25,14 @@ Thumbs.db
 .env
 .env.*
 
-# SDD tooling (agent infrastructure, not project code)
+# Agent & workflow tooling (local infrastructure, not project code)
 .agents/
 .atl/
+odd/
+skills-lock.json
+
+# Generated example outputs
+examples/*_output.json
 
 # uv
 uv.lock

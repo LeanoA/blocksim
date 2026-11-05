@@ -1,53 +1,53 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BlockSim — Script de inicio rápido
+# BlockSim — Quick Start Script
 # =============================================================================
 #
-# Inicia el sistema completo (backend + frontend) con un solo comando.
+# Starts the full system (backend + frontend) with a single command.
 #
-# Uso:
-#   ./start.sh          # Inicia backend y frontend
-#   ./start.sh --help   # Muestra esta ayuda
+# Usage:
+#   ./start.sh          # Start backend and frontend
+#   ./start.sh --help   # Show this help message
 #
-# Requisitos:
-#   - uv  (gestor de paquetes Python)  — https://docs.astral.sh/uv/
-#   - node / npm                       — https://nodejs.org/
+# Requirements:
+#   - uv  (Python package manager) — https://docs.astral.sh/uv/
+#   - node / npm                   — https://nodejs.org/
 #
-# El script:
-#   1. Verifica que las dependencias del sistema estén instaladas
-#   2. Instala/sincroniza dependencias del backend (uv sync)
-#   3. Instala dependencias del frontend (npm install)
-#   4. Inicia el servidor API (uvicorn) en segundo plano
-#   5. Inicia el servidor de desarrollo frontend (Vite)
-#   6. Limpia procesos al salir (Ctrl+C)
+# Steps performed:
+#   1. Verify required system dependencies are installed
+#   2. Sync backend dependencies (uv sync)
+#   3. Install frontend dependencies (npm install)
+#   4. Start the API server (uvicorn) in the background
+#   5. Start the frontend dev server (Vite)
+#   6. Clean up background processes on exit (Ctrl+C)
 # =============================================================================
 
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Colores para mensajes en consola
+# Console colors
 # ---------------------------------------------------------------------------
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
-NC='\033[0m' # Sin color
+NC='\033[0m'
 
 # ---------------------------------------------------------------------------
-# Directorio raíz del proyecto (donde está este script)
+# Project root directory
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="${SCRIPT_DIR}/backend"
 FRONTEND_DIR="${SCRIPT_DIR}/frontend"
 
 # ---------------------------------------------------------------------------
-# PIDs de procesos en segundo plano (para limpiar al salir)
+# Background process PIDs (for cleanup on exit)
 # ---------------------------------------------------------------------------
 BACKEND_PID=""
 
 # ---------------------------------------------------------------------------
-# Funciones auxiliares
+# Helper functions
 # ---------------------------------------------------------------------------
 
 log_info()    { echo -e "${BLUE}[INFO]${NC}  $*"; }
@@ -55,13 +55,13 @@ log_ok()      { echo -e "${GREEN}[OK]${NC}    $*"; }
 log_warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 log_error()   { echo -e "${RED}[ERROR]${NC} $*"; }
 
-mostrar_ayuda() {
+show_help() {
     echo ""
-    echo -e "${CYAN}BlockSim — Script de inicio rápido${NC}"
+    echo -e "${CYAN}BlockSim — Quick Start Script${NC}"
     echo ""
-    echo "Uso:"
-    echo "  ./start.sh          Inicia backend y frontend"
-    echo "  ./start.sh --help   Muestra esta ayuda"
+    echo "Usage:"
+    echo "  ./start.sh          Start backend and frontend"
+    echo "  ./start.sh --help   Show this help message"
     echo ""
     echo "URLs:"
     echo "  Backend API:    http://localhost:8000"
@@ -72,62 +72,58 @@ mostrar_ayuda() {
 }
 
 # ---------------------------------------------------------------------------
-# Limpieza al salir — mata procesos en segundo plano
+# Exit cleanup — terminates background processes
 # ---------------------------------------------------------------------------
 cleanup() {
     echo ""
-    log_info "Deteniendo servicios..."
+    log_info "Stopping services..."
 
     if [[ -n "${BACKEND_PID}" ]] && kill -0 "${BACKEND_PID}" 2>/dev/null; then
         kill "${BACKEND_PID}" 2>/dev/null
         wait "${BACKEND_PID}" 2>/dev/null || true
-        log_ok "Backend detenido (PID ${BACKEND_PID})"
+        log_ok "Backend stopped (PID ${BACKEND_PID})"
     fi
 
-    log_ok "Todos los servicios detenidos. ¡Hasta luego!"
+    log_ok "All services stopped."
     exit 0
 }
 
-# Capturar señales de salida para limpiar procesos
 trap cleanup SIGINT SIGTERM EXIT
 
 # ---------------------------------------------------------------------------
-# Verificación de dependencias del sistema
+# System dependency checks
 # ---------------------------------------------------------------------------
-verificar_dependencias() {
-    log_info "Verificando dependencias del sistema..."
+check_dependencies() {
+    log_info "Checking system dependencies..."
 
-    local faltan=0
+    local missing=0
 
-    # Verificar uv
     if command -v uv &>/dev/null; then
-        log_ok "uv encontrado: $(uv --version)"
+        log_ok "uv found: $(uv --version)"
     else
-        log_error "uv no está instalado."
-        log_info "  Instálalo con: curl -LsSf https://astral.sh/uv/install.sh | sh"
-        faltan=1
+        log_error "uv is not installed."
+        log_info "  Install with: curl -LsSf https://astral.sh/uv/install.sh | sh"
+        missing=1
     fi
 
-    # Verificar Node.js
     if command -v node &>/dev/null; then
-        log_ok "Node.js encontrado: $(node --version)"
+        log_ok "Node.js found: $(node --version)"
     else
-        log_error "Node.js no está instalado."
-        log_info "  Instálalo desde: https://nodejs.org/"
-        faltan=1
+        log_error "Node.js is not installed."
+        log_info "  Install from: https://nodejs.org/"
+        missing=1
     fi
 
-    # Verificar npm
     if command -v npm &>/dev/null; then
-        log_ok "npm encontrado: $(npm --version)"
+        log_ok "npm found: $(npm --version)"
     else
-        log_error "npm no está instalado."
-        log_info "  Normalmente se instala junto con Node.js."
-        faltan=1
+        log_error "npm is not installed."
+        log_info "  Typically installed alongside Node.js."
+        missing=1
     fi
 
-    if [[ "${faltan}" -ne 0 ]]; then
-        log_error "Faltan dependencias. Instálalas e intenta de nuevo."
+    if [[ "${missing}" -ne 0 ]]; then
+        log_error "Missing required dependencies. Please install them and retry."
         exit 1
     fi
 
@@ -135,30 +131,30 @@ verificar_dependencias() {
 }
 
 # ---------------------------------------------------------------------------
-# Instalar dependencias del backend
+# Install backend dependencies
 # ---------------------------------------------------------------------------
-instalar_backend() {
-    log_info "Sincronizando dependencias del backend (uv sync)..."
+install_backend() {
+    log_info "Syncing backend dependencies (uv sync)..."
     (cd "${BACKEND_DIR}" && uv sync --dev)
-    log_ok "Dependencias del backend listas."
+    log_ok "Backend dependencies ready."
     echo ""
 }
 
 # ---------------------------------------------------------------------------
-# Instalar dependencias del frontend
+# Install frontend dependencies
 # ---------------------------------------------------------------------------
-instalar_frontend() {
-    log_info "Instalando dependencias del frontend (npm install)..."
+install_frontend() {
+    log_info "Installing frontend dependencies (npm install)..."
     (cd "${FRONTEND_DIR}" && npm install --silent)
-    log_ok "Dependencias del frontend listas."
+    log_ok "Frontend dependencies ready."
     echo ""
 }
 
 # ---------------------------------------------------------------------------
-# Iniciar el servidor backend (uvicorn + FastAPI)
+# Start backend server (uvicorn + FastAPI)
 # ---------------------------------------------------------------------------
-iniciar_backend() {
-    log_info "Iniciando servidor backend (uvicorn)..."
+start_backend() {
+    log_info "Starting backend server (uvicorn)..."
     (
         cd "${BACKEND_DIR}" && \
         uv run uvicorn blocksim.api.app:create_app \
@@ -168,53 +164,50 @@ iniciar_backend() {
             --port 8000
     ) &
     BACKEND_PID=$!
-    log_ok "Backend iniciado en segundo plano (PID ${BACKEND_PID})"
+    log_ok "Backend running in background (PID ${BACKEND_PID})"
     echo ""
 }
 
 # ---------------------------------------------------------------------------
-# Iniciar el servidor frontend (Vite dev server)
+# Start frontend server (Vite dev server)
 # ---------------------------------------------------------------------------
-iniciar_frontend() {
-    log_info "Iniciando servidor frontend (Vite)..."
+start_frontend() {
+    log_info "Starting frontend server (Vite)..."
     echo ""
     echo -e "${CYAN}=============================================${NC}"
-    echo -e "${CYAN}  BlockSim está corriendo:${NC}"
+    echo -e "${CYAN}  BlockSim is running:${NC}"
     echo -e ""
-    echo -e "  ${GREEN}Frontend:${NC}   http://localhost:5173"
+    echo -e "  ${GREEN}Frontend:${NC}    http://localhost:5173"
     echo -e "  ${GREEN}Backend API:${NC} http://localhost:8000"
-    echo -e "  ${GREEN}API Docs:${NC}   http://localhost:8000/docs"
-    echo -e "  ${GREEN}Health:${NC}     http://localhost:8000/health"
+    echo -e "  ${GREEN}API Docs:${NC}    http://localhost:8000/docs"
+    echo -e "  ${GREEN}Health:${NC}      http://localhost:8000/health"
     echo -e ""
-    echo -e "  Presiona ${YELLOW}Ctrl+C${NC} para detener todo."
+    echo -e "  Press ${YELLOW}Ctrl+C${NC} to stop all services."
     echo -e "${CYAN}=============================================${NC}"
     echo ""
 
-    # El frontend corre en primer plano para que Ctrl+C lo detenga
     (cd "${FRONTEND_DIR}" && npm run dev)
 }
 
 # ---------------------------------------------------------------------------
-# Programa principal
+# Main entrypoint
 # ---------------------------------------------------------------------------
 
-# Mostrar ayuda si se solicita
 if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
-    mostrar_ayuda
+    show_help
 fi
 
 echo ""
 echo -e "${CYAN}╔══════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║        BlockSim — Inicio Rápido          ║${NC}"
+echo -e "${CYAN}║          BlockSim — Quick Start          ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════╝${NC}"
 echo ""
 
-verificar_dependencias
-instalar_backend
-instalar_frontend
-iniciar_backend
+check_dependencies
+install_backend
+install_frontend
+start_backend
 
-# Esperar un momento para que el backend arranque antes del frontend
 sleep 2
 
-iniciar_frontend
+start_frontend
