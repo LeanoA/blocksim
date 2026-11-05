@@ -14,6 +14,9 @@ dependencies = [
     "python-multipart>=0.0.6",
 ]
 
+[project.scripts]
+blocksim = "blocksim.cli:cli_entrypoint"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
