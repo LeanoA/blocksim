@@ -9,14 +9,13 @@ Covers spec scenarios:
 
 from __future__ import annotations
 
-import math
 
 import numpy as np
 import pytest
 
 from blocksim.core.block import Block, InputPort, OutputPort, PortAlreadyConnectedError
 from blocksim.core.graph import AlgebraicLoopError
-from blocksim.core.solver import EulerSolver, RK4Solver
+from blocksim.core.solver import RK4Solver
 from blocksim.core.system import (
     DuplicateBlockIdError,
     DynamicSystem,

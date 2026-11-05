@@ -23,16 +23,10 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel as PydanticBaseModel
 
-from blocksim.api.store import ModelNotFoundError, model_store
+from blocksim.api.store import model_store
 from blocksim.blocks.registry import registry
-from blocksim.core.block import Block, PortAlreadyConnectedError
-from blocksim.core.graph import AlgebraicLoopError
 from blocksim.core.system import (
-    DuplicateBlockIdError,
     DynamicSystem,
-    InvalidConnectionError,
-    SimulationDivergenceError,
-    SystemNotCompiledError,
 )
 from blocksim.models.persistence import (
     ModelFileError,
@@ -50,7 +44,6 @@ from blocksim.models.schemas import (
     SimulationConfigSchema,
     SimulationResultSchema,
     ValidationIssue,
-    ValidationResult,
 )
 from blocksim.models.validator import ModelValidator
 
@@ -683,7 +676,7 @@ async def simulate(
             for err in errors
         ]
 
-    status = (
+    status: str = (
         "completed_with_errors" if block_errors_schema else "completed"
     )
 
@@ -694,5 +687,5 @@ async def simulate(
             for key, values in result.outputs.items()
         },
         block_errors=block_errors_schema,
-        status=status,
+        status="completed_with_errors" if status == "completed_with_errors" else "completed",
     )

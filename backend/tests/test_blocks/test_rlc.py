@@ -45,6 +45,8 @@ from blocksim.blocks.math_ops import Sum
 from blocksim.blocks.sinks import Scope
 from blocksim.core.system import DynamicSystem
 
+pytestmark = pytest.mark.slow
+
 
 # ---------------------------------------------------------------------------
 # Analytical solutions

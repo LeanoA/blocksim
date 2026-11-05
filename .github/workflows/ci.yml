@@ -19,7 +19,9 @@ jobs:
           python-version: '3.13'
           cache: 'pip'
       - run: pip install -e ".[dev]"
-      - run: python -m pytest tests/ -v
+      - run: ruff check blocksim tests
+      - run: mypy blocksim
+      - run: python -m pytest tests/ -m "" -v
 
   frontend-checks:
     runs-on: ubuntu-latest

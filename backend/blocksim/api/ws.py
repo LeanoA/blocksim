@@ -26,7 +26,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from blocksim.api.routes import _build_system
 from blocksim.api.store import ModelNotFoundError, model_store
 from blocksim.core.solver import RK4Solver, get_solver
-from blocksim.core.system import SimulationDivergenceError
+from blocksim.core.system import DynamicSystem
 from blocksim.models.schemas import SimulationConfigSchema
 
 ws_router = APIRouter()
@@ -118,7 +118,7 @@ async def ws_simulate(websocket: WebSocket, model_id: str) -> None:
 
 async def _stream_simulation(
     websocket: WebSocket,
-    system: "DynamicSystem",
+    system: DynamicSystem,
     config: SimulationConfigSchema,
 ) -> None:
     """Execute the simulation loop, streaming frames over the WebSocket.
@@ -126,8 +126,6 @@ async def _stream_simulation(
     This performs the same simulation as ``DynamicSystem.simulate()`` but
     yields control to the event loop periodically and streams output frames.
     """
-    from blocksim.core.solver import RK4Solver, get_solver
-
     # Resolve solver.
     if config.solver:
         solver = get_solver(config.solver)
@@ -217,7 +215,7 @@ async def _stream_simulation(
     await websocket.close()
 
 
-def _collect_signals(system: "DynamicSystem") -> dict[str, float]:
+def _collect_signals(system: DynamicSystem) -> dict[str, float]:
     """Collect current output values from all blocks.
 
     Returns a flat dict mapping ``"block_id.port_name"`` to current float values.

@@ -154,7 +154,7 @@ def _auto_register() -> None:
         Capacitor,
     )
 
-    for cls in [
+    block_classes: list[type[Block]] = [
         # Sources
         ConstantSource,
         StepSource,
@@ -176,7 +176,8 @@ def _auto_register() -> None:
         Resistor,
         Inductor,
         Capacitor,
-    ]:
+    ]
+    for cls in block_classes:
         registry.register(cls.__name__, cls)
 
 

@@ -3,6 +3,44 @@ name = "blocksim-workspace"
 version = "0.1.0"
 description = "BlockSim — a Simulink-like block-diagram simulation framework"
 requires-python = ">=3.11,<3.15"
+dependencies = [
+    "blocksim",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[tool.uv.sources]
+blocksim = { workspace = true }
 
 [tool.uv.workspace]
 members = ["backend"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
+addopts = "-m 'not slow'"
+markers = [
+    "slow: marks multi-second numerical benchmark and full RLC analytical sweep tests (deselect with '-m \"not slow\"')",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501", "E731", "E741"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+check_untyped_defs = true

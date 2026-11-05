@@ -8,7 +8,6 @@ Covers spec scenarios:
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from blocksim.core.block import Block, Connection, InputPort, OutputPort

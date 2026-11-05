@@ -256,7 +256,7 @@ class ScipySolver(Solver):
                 f"ScipySolver({self._method}) failed at t={t}: {result.message}"
             )
         # result.y has shape (n_states, n_points); take the last column
-        return result.y[:, -1]
+        return np.asarray(result.y[:, -1], dtype=float)
 
 
 # ---------------------------------------------------------------------------

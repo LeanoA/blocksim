@@ -17,11 +17,6 @@ from blocksim.core.system import (
     InvalidConnectionError,
     SimulationDivergenceError,
 )
-from blocksim.models.schemas import (
-    BlockSchema,
-    ConnectionSchema,
-    ModelSchema,
-)
 
 
 @pytest.fixture
@@ -55,7 +50,7 @@ class TestPortValidation:
 
     def test_error_lists_missing_ports(self) -> None:
         """The error message should list which ports are missing."""
-        from blocksim.blocks.math_ops import Gain, Sum
+        from blocksim.blocks.math_ops import Sum
         from blocksim.blocks.sources import ConstantSource
 
         sys = DynamicSystem()
@@ -217,7 +212,6 @@ class TestDescriptiveErrors:
     """Validate that domain errors contain helpful context."""
 
     def test_divergence_error_includes_time(self) -> None:
-        import numpy as np
         err = SimulationDivergenceError(time=0.5, step=500, block_id="cap1")
         assert "t=0.5" in str(err)
         assert "step=500" in str(err)

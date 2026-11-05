@@ -11,13 +11,11 @@ and orchestrates the simulation loop:
 
 from __future__ import annotations
 
-from typing import Any
 
 import numpy as np
 
-from blocksim.core.block import Block, Connection, PortAlreadyConnectedError
+from blocksim.core.block import Block, Connection
 from blocksim.core.graph import (
-    AlgebraicLoopError,
     build_graph,
     topological_sort,
 )
@@ -302,6 +300,7 @@ class DynamicSystem:
             raise SystemNotCompiledError()
 
         # Resolve solver.
+        solver_instance: Solver
         if solver is None:
             solver_instance = RK4Solver()
         elif isinstance(solver, str):

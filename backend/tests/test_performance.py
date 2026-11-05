@@ -18,8 +18,9 @@ from blocksim.blocks.electrical import Capacitor, Inductor, Resistor, VoltageSou
 from blocksim.blocks.math_ops import Derivative, Gain, Integrator, Multiply, Sum
 from blocksim.blocks.sinks import Display, Scope
 from blocksim.blocks.sources import ConstantSource, RampSource, SineSource, StepSource
-from blocksim.core.solver import EulerSolver, RK4Solver
 from blocksim.core.system import DynamicSystem
+
+pytestmark = pytest.mark.slow
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +112,7 @@ class TestPerformance100Block:
         t_end = dt * 1000
 
         start = time.perf_counter()
-        result = sys.simulate(t_span=(0.0, t_end), dt=dt, solver="rk4")
+        sys.simulate(t_span=(0.0, t_end), dt=dt, solver="rk4")
         elapsed = time.perf_counter() - start
 
         assert elapsed < 5.0, (

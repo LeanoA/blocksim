@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
 
 from blocksim.core.block import Block, OutputPort
 
