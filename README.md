@@ -110,21 +110,47 @@ npm run dev
 
 The frontend will be available at `http://localhost:5173` (Vite default).
 
-## Running Tests
+## Command-Line Interface (`blocksim`)
 
-### Backend Tests
+BlockSim includes a terminal-native CLI for inspecting registered blocks, validating models, checking topological execution order, and running ODE simulations directly from the shell:
 
 ```bash
-cd backend
-uv run python -m pytest tests/ -v
+# List all registered block types and their ports
+uv run blocksim blocks
+
+# Validate a model JSON file (3-tier schema, referential, and semantic validation)
+uv run blocksim validate examples/rlc_series.json
+
+# Inspect compiled topology and state vector dimension
+uv run blocksim inspect examples/rlc_series.json
+
+# Run a simulation from the CLI and print JSON summary
+uv run blocksim run examples/rlc_series.json --solver rk4 --t-end 0.05 --dt 0.001 --json
 ```
 
-### Frontend
+## Running Tests & Static Checks
+
+### Backend Tests, Linter & Typechecker
+
+```bash
+# Fast unit, API, and CLI suite (~1.7s, 432 tests — default)
+uv run pytest -q
+
+# Full suite including analytical RLC sweeps and 100-block benchmarks
+uv run pytest -m "" -v
+
+# Linter and static type checking
+uv run ruff check backend/blocksim backend/tests
+uv run mypy backend/blocksim
+```
+
+### Frontend Tests, Linter & Build
 
 ```bash
 cd frontend
-npm run lint     # ESLint checks
-npm run build    # TypeScript compilation + Vite build
+npm test -- --run  # Vitest unit & component tests (~0.9s)
+npm run lint       # ESLint checks
+npm run build      # TypeScript compilation + Vite build
 ```
 
 ## Project Structure
