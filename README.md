@@ -4,7 +4,7 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)
 
-A Simulink-like block-diagram simulation framework for modeling and solving dynamic systems. Build multi-component physical and process models (RLC circuits, industrial control loops, and chemical plant unit operations) visually, connect blocks, and run ODE-based simulations with real-time results streamed via WebSocket.
+A block-diagram simulation framework for modeling and solving dynamic systems. Build multi-component physical and process models (RLC circuits, industrial control loops, and chemical plant unit operations) visually, connect blocks, and run ODE-based simulations with real-time results streamed via WebSocket.
 
 ## Prerequisites / Tested Versions
 

@@ -1,7 +1,7 @@
 [project]
 name = "blocksim-workspace"
 version = "0.1.0"
-description = "BlockSim — a Simulink-like block-diagram simulation framework"
+description = "BlockSim — block-diagram simulation framework for dynamic systems and ODE modeling"
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "blocksim",

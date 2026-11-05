@@ -198,8 +198,9 @@ def _is_non_feedthrough_block(block: Block) -> bool:
     2. Stateful blocks (``state_size > 0``) — these output their ODE state,
        which is computed by the solver, not by direct input feedthrough.
 
-    This mirrors Simulink's treatment of Integration blocks as non-direct-
-    feedthrough, allowing them to break algebraic loops.
+    This follows standard continuous-time simulation semantics where integration
+    blocks act as non-direct-feedthrough elements, allowing them to break
+    algebraic loops.
     """
     # Delay blocks are always non-feedthrough.
     if "Delay" in type(block).__name__:
