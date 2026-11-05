@@ -1,6 +1,6 @@
 # CLAUDE.md — Operational Manifest for BlockSim
 
-BlockSim is a modular block-diagram simulation framework combining a decoupled Python ODE engine (`backend/blocksim/`), a deterministic CLI (`blocksim`), a FastAPI REST/WebSocket backend, and a React/TypeScript visual editor (`frontend/`).
+BlockSim is a modular block-diagram simulation framework combining a decoupled Python ODE engine (`backend/blocksim/`), a deterministic CLI (`blocksim`), a FastAPI REST/WebSocket backend, and a React/TypeScript visual editor (`frontend/`). It is designed to scale from foundational physical/electrical circuits to real-time, multi-component chemical process plant simulations and industrial control loops.
 
 ## 1. System Architecture & Module Boundaries
 

@@ -4,7 +4,7 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)
 
-A Simulink-like block-diagram simulation framework for modeling and solving dynamic systems. Build circuit models (RLC, etc.) visually, connect blocks, and run ODE-based simulations with real-time results streamed via WebSocket.
+A Simulink-like block-diagram simulation framework for modeling and solving dynamic systems. Build multi-component physical and process models (RLC circuits, industrial control loops, and chemical plant unit operations) visually, connect blocks, and run ODE-based simulations with real-time results streamed via WebSocket.
 
 ## Prerequisites / Tested Versions
 
@@ -257,7 +257,16 @@ The simulation engine includes robustness features:
 | `euler`       | Fixed-step        | Testing, simple systems         |
 | `rk4`         | Fixed-step        | General-purpose (default)       |
 | `scipy_rk45`  | Adaptive          | Smooth non-stiff ODEs           |
-| `radau`       | Implicit adaptive | Stiff systems (RLC circuits)    |
+| `radau`       | Implicit adaptive | Stiff systems (RLC circuits, coupled chemical kinetics) |
+
+## Vision & Roadmap: Real-Time Chemical Process Plant Simulation
+
+BlockSim's primary engineering goal is scaling from foundational physical circuits to **real-time, multi-unit chemical process plant simulation and industrial control**:
+
+- **Chemical Unit Operation Blocks** — Continuous Stirred-Tank Reactors (`CSTR`), mixing tanks, counter-current heat exchangers, distillation stage dynamics, and compressible/incompressible pipe networks governed by coupled mass and energy balances.
+- **Industrial Process Control & Instrumentation** — Closed-loop `PID` controllers with anti-windup and bumpless transfer, cascade/feedforward control topologies, non-linear control valves ($C_v$ flow characteristics, hysteresis, stiction), and sensor dead-time/lag blocks.
+- **Real-Time Execution & Pacing Engine** — Soft real-time simulation scheduler with deterministic wall-clock pacing, real-time factor telemetry ($\text{simulated time} / \text{wall-clock time}$), and live operator setpoint/disturbance injection over WebSocket.
+- **Large-Scale Plant Topologies** — Sub-system hierarchical grouping, tear-stream convergence for recycle loops, and sparse Jacobian acceleration for stiff, multi-hundred-block chemical plant flowsheets.
 
 ## License
 
