@@ -28,6 +28,10 @@ Thumbs.db
 # Agent & workflow tooling (local infrastructure, not project code)
 .agents/
 .atl/
+.claude/
+.claudeignore
+CLAUDE.md
+.github/
 odd/
 skills-lock.json
 
